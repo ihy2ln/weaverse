@@ -31,6 +31,12 @@ import com.ihy2ln.weaverse.core.text.insertGeneratedProseAfter
 import com.ihy2ln.weaverse.core.text.withSceneBeatCollapsedToggled
 import com.ihy2ln.weaverse.core.text.withSceneBeatPrompt
 import com.ihy2ln.weaverse.core.text.applyColor
+import com.ihy2ln.weaverse.core.text.applyFontFamily
+import com.ihy2ln.weaverse.core.text.applyFontSize
+import com.ihy2ln.weaverse.core.text.applyHighlight
+import com.ihy2ln.weaverse.core.text.fontFamilyKeyInRange
+import com.ihy2ln.weaverse.core.text.fontSizeSpInRange
+import com.ihy2ln.weaverse.core.text.marksInRange
 import com.ihy2ln.weaverse.core.text.documentFromJson
 import com.ihy2ln.weaverse.core.text.plainText
 import com.ihy2ln.weaverse.core.text.replaceRangeText
@@ -133,6 +139,9 @@ data class WriteUiState(
     val statusMessage: String = "",
     val isSummarizing: Boolean = false,
     val showColorPicker: Boolean = false,
+    val showHighlightPicker: Boolean = false,
+    val showFontFamilyPicker: Boolean = false,
+    val showFontSizePicker: Boolean = false,
     val pendingCodexEntryId: String? = null,
     /** Codex names and aliases highlighted inside the scene-beat prompt. */
     val codexNames: List<String> = emptyList(),
@@ -417,6 +426,81 @@ class WriteViewModel @Inject constructor(
     fun requestColorPicker() {
         if (!_uiState.value.selection.hasSelection) return
         _uiState.update { it.copy(showColorPicker = true, editPopupBlockIndex = null) }
+    }
+
+    fun dismissHighlightPicker() = _uiState.update { it.copy(showHighlightPicker = false) }
+
+    fun applyHighlightOnSelection(colorHex: String?) {
+        val sel = _uiState.value.selection
+        if (!sel.hasSelection) return
+        val block = _uiState.value.blocks.getOrNull(sel.blockIndex) as? Paragraph ?: return
+        val next = block.copy(spans = block.spans.applyHighlight(sel.min, sel.max, colorHex))
+        flushTypingHistory()
+        updateBlocks(recordHistory = true) { it[sel.blockIndex] = next }
+        _uiState.update { it.copy(showHighlightPicker = false) }
+    }
+
+    fun requestHighlightPicker() {
+        if (!_uiState.value.selection.hasSelection) return
+        _uiState.update { it.copy(showHighlightPicker = true, editPopupBlockIndex = null) }
+    }
+
+    fun dismissFontFamilyPicker() = _uiState.update { it.copy(showFontFamilyPicker = false) }
+
+    fun applyFontFamilyOnSelection(fontFamilyKey: String) {
+        val sel = _uiState.value.selection
+        if (!sel.hasSelection) return
+        val block = _uiState.value.blocks.getOrNull(sel.blockIndex) as? Paragraph ?: return
+        val next = block.copy(spans = block.spans.applyFontFamily(sel.min, sel.max, fontFamilyKey))
+        flushTypingHistory()
+        updateBlocks(recordHistory = true) { it[sel.blockIndex] = next }
+        _uiState.update { it.copy(showFontFamilyPicker = false) }
+    }
+
+    fun requestFontFamilyPicker() {
+        if (!_uiState.value.selection.hasSelection) return
+        _uiState.update { it.copy(showFontFamilyPicker = true, editPopupBlockIndex = null) }
+    }
+
+    fun dismissFontSizePicker() = _uiState.update { it.copy(showFontSizePicker = false) }
+
+    fun applyFontSizeOnSelection(fontSizeSp: Float) {
+        val sel = _uiState.value.selection
+        if (!sel.hasSelection) return
+        val block = _uiState.value.blocks.getOrNull(sel.blockIndex) as? Paragraph ?: return
+        val next = block.copy(spans = block.spans.applyFontSize(sel.min, sel.max, fontSizeSp))
+        flushTypingHistory()
+        updateBlocks(recordHistory = true) { it[sel.blockIndex] = next }
+        _uiState.update { it.copy(showFontSizePicker = false) }
+    }
+
+    fun requestFontSizePicker() {
+        if (!_uiState.value.selection.hasSelection) return
+        _uiState.update { it.copy(showFontSizePicker = true, editPopupBlockIndex = null) }
+    }
+
+    /** Marks shared by the current selection — drives ✓ indicators and toolbar toggle state. */
+    fun activeMarksInSelection(): Set<Mark> {
+        val sel = _uiState.value.selection
+        if (!sel.hasSelection) return emptySet()
+        val block = _uiState.value.blocks.getOrNull(sel.blockIndex) as? Paragraph ?: return emptySet()
+        return block.spans.marksInRange(sel.min, sel.max)
+    }
+
+    /** Font family key shared by the current selection, or null if unset/mixed. */
+    fun activeFontFamilyKeyInSelection(): String? {
+        val sel = _uiState.value.selection
+        if (!sel.hasSelection) return null
+        val block = _uiState.value.blocks.getOrNull(sel.blockIndex) as? Paragraph ?: return null
+        return block.spans.fontFamilyKeyInRange(sel.min, sel.max)
+    }
+
+    /** Font size shared by the current selection, or null if unset/mixed. */
+    fun activeFontSizeSpInSelection(): Float? {
+        val sel = _uiState.value.selection
+        if (!sel.hasSelection) return null
+        val block = _uiState.value.blocks.getOrNull(sel.blockIndex) as? Paragraph ?: return null
+        return block.spans.fontSizeSpInRange(sel.min, sel.max)
     }
 
     fun selectAllInFocusedBlock() {

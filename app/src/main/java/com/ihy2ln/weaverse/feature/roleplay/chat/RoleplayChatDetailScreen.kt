@@ -43,6 +43,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -173,10 +174,7 @@ fun RoleplayChatDetailScreen(
     )
 
     LaunchedEffect(state.displayMode, state.mediaPanels, state.messages.size) {
-        when (state.displayMode) {
-            "roleplay" -> viewModel.ensureMangaGridPlacement()
-            "dungeonMaster" -> viewModel.ensureDmGridPlacement()
-        }
+        if (state.displayMode == "roleplay") viewModel.ensureMangaGridPlacement()
     }
 
     if (editingMessageId != null) {
@@ -239,9 +237,9 @@ fun RoleplayChatDetailScreen(
                     selectedKey = state.selectedMediaKey,
                     canPaste = state.canPasteMedia,
                     compactStyle = compactStyle,
-                    gridSize = MediaGrid.SIZE,
+                    gridSize = MediaGrid.DM_SIZE,
                     textEmphasis = false,
-                    emptyHint = "Manga canvas — add Media/Audio, then hold → Move to place on the grid. Drag corner to resize. Drop onto another picture to stack.\nPress / for AI · \\ for manual text.",
+                    emptyHint = "Storyboard — a 3×3 grid of panels. Tap + on an empty panel to add media, then hold → Move to reposition or drag corner to resize (this moves other panels out of the way, it won't cover them). Drop onto another picture to stack. Use + Page for more panels than one board holds.\nPress / for AI · \\ for manual text.",
                     onSelect = { msgId, blockId -> viewModel.selectMedia(msgId, blockId) },
                     onRemove = viewModel::removeMedia,
                     onSnap = viewModel::setMediaGridCell,
@@ -250,6 +248,10 @@ fun RoleplayChatDetailScreen(
                     onStackMenu = viewModel::stackMedia,
                     onCycleStack = viewModel::cycleMediaStack,
                     onMediaEdit = viewModel::onMediaEditAction,
+                    onSetCaption = viewModel::setPanelCaption,
+                    showAddCell = true,
+                    onAddMedia = { col, row, page -> viewModel.requestMediaPickForCell(col, row, page) },
+                    pagingEnabled = true,
                     modifier = Modifier.fillMaxSize(),
                 )
             }
@@ -258,22 +260,14 @@ fun RoleplayChatDetailScreen(
                     .weight(1f)
                     .padding(horizontal = InkSpacing.sm),
             ) {
-                MangaSnapGrid(
-                    panels = state.mediaPanels,
-                    selectedKey = state.selectedMediaKey,
-                    canPaste = state.canPasteMedia,
-                    compactStyle = compactStyle,
-                    gridSize = MediaGrid.DM_SIZE,
-                    textEmphasis = true,
-                    emptyHint = "DM · 3×3 · text & picture · hold → Move. Prose and pictures share an invisible snap grid.\nPress / for AI · \\ for manual text.",
-                    onSelect = { msgId, blockId -> viewModel.selectMedia(msgId, blockId) },
-                    onRemove = viewModel::removeMedia,
-                    onSnap = viewModel::setMediaGridCell,
-                    onResizeSpan = viewModel::setMediaGridSpan,
-                    onStackOnto = viewModel::stackMediaOnto,
-                    onStackMenu = viewModel::stackMedia,
-                    onCycleStack = viewModel::cycleMediaStack,
-                    onMediaEdit = viewModel::onMediaEditAction,
+                DungeonMasterFlow(
+                    messages = state.messages,
+                    mediaPanels = state.mediaPanels,
+                    input = state.input,
+                    isStreaming = state.isStreaming,
+                    onInputChange = viewModel::onInputChange,
+                    onSend = viewModel::generate,
+                    onAddMedia = viewModel::requestMediaPick,
                     modifier = Modifier.fillMaxSize(),
                 )
             }
@@ -445,6 +439,139 @@ fun RoleplayChatDetailScreen(
     }
 }
 
+/**
+ * Dungeon Master mode: one linear "page" — the current scene picture on top,
+ * the DM's narration in the middle, and the player's response pinned at the
+ * bottom. Replaces the free-form snap grid this mode used to share with manga.
+ */
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun DungeonMasterFlow(
+    messages: List<RpMessageUi>,
+    mediaPanels: List<RpMediaRef>,
+    input: String,
+    isStreaming: Boolean,
+    onInputChange: (String) -> Unit,
+    onSend: () -> Unit,
+    onAddMedia: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val tokens = inkTokens()
+    val lastNarration = messages.lastOrNull { it.role == "char" }
+    val pendingUser = messages.lastOrNull()?.takeIf { it.role == "user" }
+    val sceneImage = mediaPanels.lastOrNull { it.path.isNotBlank() && !it.isAudio }
+
+    Column(modifier = modifier.fillMaxSize()) {
+        // Large scene picture — a fixed share of the screen, not a scroll-capped thumbnail.
+        Box(
+            modifier = Modifier
+                .weight(1.1f)
+                .fillMaxWidth()
+                .padding(InkSpacing.md),
+            contentAlignment = Alignment.Center,
+        ) {
+            if (sceneImage != null) {
+                ZoomableMedia(
+                    path = sceneImage.path,
+                    contentDescription = "Scene",
+                    contentScale = ContentScale.Fit,
+                    decodeOriginal = true,
+                    fillPanel = true,
+                    modifier = Modifier.fillMaxSize(),
+                )
+                InkTextButton(
+                    label = "+",
+                    onClick = onAddMedia,
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(InkSpacing.xs)
+                        .background(
+                            MaterialTheme.colorScheme.surface.copy(alpha = 0.9f),
+                            RoundedCornerShape(InkSpacing.radiusSm),
+                        ),
+                )
+            } else {
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .clip(RoundedCornerShape(InkSpacing.radiusSm))
+                        .border(
+                            1.dp,
+                            tokens.secondaryText.copy(alpha = 0.35f),
+                            RoundedCornerShape(InkSpacing.radiusSm),
+                        )
+                        .combinedClickable(onClick = onAddMedia),
+                    verticalArrangement = Arrangement.Center,
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    Text(
+                        "+",
+                        style = MaterialTheme.typography.headlineLarge,
+                        color = tokens.secondaryText,
+                    )
+                    Text(
+                        "Tap to add a scene picture",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = tokens.secondaryText,
+                        modifier = Modifier.padding(top = InkSpacing.xs),
+                    )
+                }
+            }
+        }
+        Column(
+            modifier = Modifier
+                .weight(0.9f)
+                .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = InkSpacing.md),
+        ) {
+            Text(
+                text = lastNarration?.text?.takeIf { it.isNotBlank() }
+                    ?: "The DM hasn't set a scene yet — type an opening below and send it.",
+                style = MaterialTheme.typography.bodyLarge,
+                color = tokens.primaryText,
+            )
+            if (pendingUser != null && pendingUser.text.isNotBlank()) {
+                Text(
+                    "You: ${pendingUser.text}",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = tokens.secondaryText,
+                    modifier = Modifier.padding(top = InkSpacing.md),
+                )
+            }
+            if (isStreaming) {
+                Text(
+                    "The DM is thinking…",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = tokens.secondaryText,
+                    modifier = Modifier.padding(top = InkSpacing.sm),
+                )
+            }
+        }
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = InkSpacing.sm, vertical = InkSpacing.xs),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            OutlinedTextField(
+                value = input,
+                onValueChange = onInputChange,
+                modifier = Modifier.weight(1f),
+                placeholder = { Text("What do you do?") },
+                minLines = 1,
+                maxLines = 4,
+            )
+            InkTextButton(
+                label = if (isStreaming) "…" else "Send",
+                onClick = onSend,
+                modifier = Modifier.padding(start = InkSpacing.xs),
+            )
+        }
+    }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun MangaSnapGrid(
     panels: List<RpMediaRef>,
@@ -462,16 +589,54 @@ private fun MangaSnapGrid(
     onStackMenu: (String, String) -> Unit,
     onCycleStack: (String, String) -> Unit,
     onMediaEdit: (String, String, MediaEditAction) -> Unit,
+    onSetCaption: (String, String, String) -> Unit = { _, _, _ -> },
+    showAddCell: Boolean = false,
+    onAddMedia: (Int, Int, Int) -> Unit = { _, _, _ -> },
+    pagingEnabled: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
     val tokens = inkTokens()
     val scroll = rememberScrollState()
+    val density = androidx.compose.ui.platform.LocalDensity.current
+    var captionEditKey by remember { mutableStateOf<String?>(null) }
+    var captionEditText by remember { mutableStateOf("") }
+    var currentPage by remember { mutableIntStateOf(0) }
+    val realPageCount = (panels.maxOfOrNull { it.gridPage } ?: 0) + 1
+    val totalPages = maxOf(realPageCount, currentPage + 1)
+    val pagePanels = if (pagingEnabled) panels.filter { it.gridPage == currentPage } else panels
     Column(
         modifier = modifier
             .fillMaxSize()
             .verticalScroll(scroll)
             .padding(horizontal = 12.dp, vertical = InkSpacing.sm),
     ) {
+        if (pagingEnabled) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                InkTextButton(
+                    label = "‹",
+                    enabled = currentPage > 0,
+                    onClick = { currentPage = (currentPage - 1).coerceAtLeast(0) },
+                )
+                Text(
+                    "Page ${currentPage + 1}/$totalPages",
+                    style = MaterialTheme.typography.labelLarge,
+                    modifier = Modifier.padding(horizontal = InkSpacing.xs),
+                )
+                InkTextButton(
+                    label = "›",
+                    enabled = currentPage < realPageCount - 1,
+                    onClick = { currentPage = (currentPage + 1).coerceAtMost(realPageCount - 1) },
+                )
+                InkTextButton(
+                    label = "+ Page",
+                    onClick = { currentPage = maxOf(realPageCount, currentPage + 1) },
+                    modifier = Modifier.padding(start = InkSpacing.sm),
+                )
+            }
+        }
         BoxWithConstraints(
             modifier = Modifier
                 .fillMaxWidth()
@@ -483,7 +648,7 @@ private fun MangaSnapGrid(
             val cellW = maxWidth / gridSize
             val cellH = maxHeight / gridSize
             // Snap grid stays active for move/resize/stack, but lines are hidden.
-            if (panels.isEmpty()) {
+            if (pagePanels.isEmpty()) {
                 Text(
                     emptyHint,
                     style = MaterialTheme.typography.bodyMedium,
@@ -493,7 +658,8 @@ private fun MangaSnapGrid(
                         .padding(InkSpacing.lg),
                 )
             }
-            panels.forEach { panel ->
+            val occupiedCells = mutableSetOf<Pair<Int, Int>>()
+            pagePanels.forEach { panel ->
                 val col = if (MediaGrid.isPlaced(panel.gridCol, panel.gridRow, gridSize)) {
                     panel.gridCol
                 } else {
@@ -508,6 +674,7 @@ private fun MangaSnapGrid(
                     .coerceAtMost(gridSize - col)
                 val rowSpan = MediaGrid.clampSpan(panel.gridRowSpan, gridSize)
                     .coerceAtMost(gridSize - row)
+                occupiedCells += MediaGrid.cellsCovered(col, row, colSpan, rowSpan, gridSize)
                 val key = "${panel.messageId}::${panel.blockId}"
                 MangaSnapPanel(
                     panel = panel,
@@ -522,7 +689,7 @@ private fun MangaSnapGrid(
                     gridSize = gridSize,
                     textEmphasis = textEmphasis,
                     compactStyle = compactStyle,
-                    panels = panels,
+                    panels = pagePanels,
                     onSelect = { onSelect(panel.messageId, panel.blockId) },
                     onRemove = { onRemove(panel.messageId, panel.blockId) },
                     onSnap = { c, r -> onSnap(panel.messageId, panel.blockId, c, r) },
@@ -533,10 +700,72 @@ private fun MangaSnapGrid(
                     onStackMenu = { onStackMenu(panel.messageId, panel.blockId) },
                     onCycleStack = { onCycleStack(panel.messageId, panel.blockId) },
                     onMediaEdit = { onMediaEdit(panel.messageId, panel.blockId, it) },
+                    onCaptionTap = {
+                        captionEditKey = key
+                        captionEditText = panel.caption.takeIf { it != "[media]" }.orEmpty()
+                    },
                 )
+            }
+            if (showAddCell) {
+                for (r in 0 until gridSize) {
+                    for (c in 0 until gridSize) {
+                        if ((c to r) in occupiedCells) continue
+                        Box(
+                            modifier = Modifier
+                                .offset {
+                                    IntOffset(
+                                        x = with(density) { (cellW * c).roundToPx() },
+                                        y = with(density) { (cellH * r).roundToPx() },
+                                    )
+                                }
+                                .width(cellW)
+                                .height(cellH)
+                                .padding(2.dp)
+                                .clip(RoundedCornerShape(InkSpacing.radiusSm))
+                                .border(
+                                    1.dp,
+                                    tokens.secondaryText.copy(alpha = 0.35f),
+                                    RoundedCornerShape(InkSpacing.radiusSm),
+                                )
+                                .combinedClickable(onClick = { onAddMedia(c, r, currentPage) }),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Text(
+                                "+",
+                                style = MaterialTheme.typography.headlineSmall,
+                                color = tokens.secondaryText,
+                            )
+                        }
+                    }
+                }
             }
         }
         Spacer(modifier = Modifier.height(48.dp))
+    }
+    val editingKey = captionEditKey
+    if (editingKey != null) {
+        AlertDialog(
+            onDismissRequest = { captionEditKey = null },
+            title = { Text("Panel caption") },
+            text = {
+                OutlinedTextField(
+                    value = captionEditText,
+                    onValueChange = { captionEditText = it },
+                    placeholder = { Text("What's said or happening in this panel…") },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    val (messageId, blockId) = editingKey.split("::", limit = 2)
+                    onSetCaption(messageId, blockId, captionEditText.trim())
+                    captionEditKey = null
+                }) { Text("Save") }
+            },
+            dismissButton = {
+                TextButton(onClick = { captionEditKey = null }) { Text("Cancel") }
+            },
+        )
     }
 }
 
@@ -564,6 +793,7 @@ private fun MangaSnapPanel(
     onStackMenu: () -> Unit,
     onCycleStack: () -> Unit,
     onMediaEdit: (MediaEditAction) -> Unit,
+    onCaptionTap: () -> Unit = {},
 ) {
     var dragX by remember(panel.blockId) { mutableFloatStateOf(0f) }
     var dragY by remember(panel.blockId) { mutableFloatStateOf(0f) }
@@ -783,17 +1013,12 @@ private fun MangaSnapPanel(
                     .padding(horizontal = 4.dp, vertical = 1.dp),
             )
         }
-        if (
-            !panel.collapsed &&
-            !panel.isTextTile &&
-            !textEmphasis &&
-            panel.caption.isNotBlank() &&
-            panel.caption != "[media]"
-        ) {
+        if (!panel.collapsed && !panel.isTextTile && !textEmphasis && !moveMode) {
+            val hasCaption = panel.caption.isNotBlank() && panel.caption != "[media]"
             Text(
-                text = panel.caption.take(40),
+                text = if (hasCaption) panel.caption.take(40) else "+ Caption",
                 style = compactStyle.copy(fontSize = 10.sp),
-                color = Color.White,
+                color = if (hasCaption) Color.White else Color.White.copy(alpha = 0.75f),
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier
@@ -801,6 +1026,7 @@ private fun MangaSnapPanel(
                     .padding(2.dp)
                     .clip(RoundedCornerShape(4.dp))
                     .background(Color.Black.copy(alpha = 0.55f))
+                    .combinedClickable(onClick = onCaptionTap)
                     .padding(horizontal = 4.dp, vertical = 2.dp),
             )
         }

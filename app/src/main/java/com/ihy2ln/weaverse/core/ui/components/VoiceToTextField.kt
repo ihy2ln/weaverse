@@ -130,6 +130,7 @@ fun VoiceToTextField(
     visualTransformation: VisualTransformation = VisualTransformation.None,
     extraTrailing: (@Composable RowScope.() -> Unit)? = null,
     compact: Boolean = false,
+    showMic: Boolean = true,
 ) {
     val shortcutHandler = LocalPromptShortcutHandler.current
     OutlinedTextField(
@@ -152,14 +153,20 @@ fun VoiceToTextField(
         enabled = enabled,
         colors = colors,
         visualTransformation = visualTransformation,
-        trailingIcon = {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                extraTrailing?.invoke(this)
-                VoiceInputButton(
-                    enabled = enabled,
-                    compact = compact,
-                    onSpoken = { spoken -> onValueChange(mergeSpokenText(value, spoken)) },
-                )
+        trailingIcon = if (extraTrailing == null && !showMic) {
+            null
+        } else {
+            {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    extraTrailing?.invoke(this)
+                    if (showMic) {
+                        VoiceInputButton(
+                            enabled = enabled,
+                            compact = compact,
+                            onSpoken = { spoken -> onValueChange(mergeSpokenText(value, spoken)) },
+                        )
+                    }
+                }
             }
         },
     )

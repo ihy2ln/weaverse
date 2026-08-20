@@ -3,7 +3,7 @@ package com.ihy2ln.weaverse.core.text
 /** Shared snap grid for Roleplay manga / Write media placement (default 6×6). */
 object MediaGrid {
     const val SIZE = 6
-    /** Dungeon Master mode canvas. */
+    /** Compact grid — used by the Roleplay Storyboard panel canvas. */
     const val DM_SIZE = 3
 
     fun clampCell(value: Int, gridSize: Int = SIZE): Int = value.coerceIn(0, gridSize - 1)
@@ -59,6 +59,26 @@ object MediaGrid {
         return 0 to 0
     }
 
+    /**
+     * Next free top-left in row-major order where a [colSpan]×[rowSpan] block fits
+     * without overlapping [occupied], or null if no such slot exists on this grid.
+     */
+    fun nextFreeSlot(
+        occupied: Set<Pair<Int, Int>>,
+        gridSize: Int,
+        colSpan: Int,
+        rowSpan: Int,
+    ): Pair<Int, Int>? {
+        for (row in 0 until gridSize) {
+            for (col in 0 until gridSize) {
+                if (canPlace(col, row, colSpan, rowSpan, occupied, gridSize = gridSize)) {
+                    return col to row
+                }
+            }
+        }
+        return null
+    }
+
     fun canPlace(
         col: Int,
         row: Int,
@@ -93,6 +113,13 @@ fun Block.gridRowOrUnset(): Int = when (this) {
     else -> -1
 }
 
+/** Storyboard: which separate board this panel lives on. 0 for block types without pages. */
+fun Block.gridPageOrZero(): Int = when (this) {
+    is MediaBlock -> gridPage
+    is MediaStackBlock -> gridPage
+    else -> 0
+}
+
 fun Block.gridColSpanOrOne(gridSize: Int = MediaGrid.SIZE): Int = when (this) {
     is MediaBlock -> MediaGrid.clampSpan(gridColSpan, gridSize)
     is MediaStackBlock -> MediaGrid.clampSpan(gridColSpan, gridSize)
@@ -123,6 +150,7 @@ fun Block.withGridPlacement(
     colSpan: Int,
     rowSpan: Int,
     gridSize: Int = MediaGrid.SIZE,
+    page: Int? = null,
 ): Block {
     val (cs, rs) = MediaGrid.clampSpanAt(col, row, colSpan, rowSpan, gridSize)
     return when (this) {
@@ -131,13 +159,22 @@ fun Block.withGridPlacement(
             gridRow = MediaGrid.clampCell(row, gridSize),
             gridColSpan = cs,
             gridRowSpan = rs,
+            gridPage = page ?: gridPage,
         )
         is MediaStackBlock -> copy(
             gridCol = MediaGrid.clampCell(col, gridSize),
             gridRow = MediaGrid.clampCell(row, gridSize),
             gridColSpan = cs,
             gridRowSpan = rs,
+            gridPage = page ?: gridPage,
         )
         else -> this
     }
+}
+
+/** Marks a panel unplaced (grid col/row = -1) without touching its span or page. */
+fun Block.withGridUnplaced(): Block = when (this) {
+    is MediaBlock -> copy(gridCol = -1, gridRow = -1)
+    is MediaStackBlock -> copy(gridCol = -1, gridRow = -1)
+    else -> this
 }

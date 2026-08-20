@@ -23,6 +23,10 @@ data class Span(
     val colorHex: String? = null,
     val highlightHex: String? = null,
     val codexEntryId: String? = null,
+    /** Key into [com.ihy2ln.weaverse.core.text.FontOption]; null = inherit the editor default. */
+    val fontFamilyKey: String? = null,
+    /** null = inherit the editor default size. */
+    val fontSizeSp: Float? = null,
 )
 
 @Serializable
@@ -84,6 +88,8 @@ data class MediaBlock(
     val gridRowSpan: Int = 1,
     /** When true, show a compact bar instead of full media. */
     val collapsed: Boolean = false,
+    /** Storyboard: which separate 3×3 board this panel lives on. 0 = first page. */
+    val gridPage: Int = 0,
 ) : Block
 
 @Serializable
@@ -106,12 +112,15 @@ data class MediaStackBlock(
     override val id: String,
     val mediaIds: List<String>,
     val currentIndex: Int = 0,
+    val caption: List<Span> = emptyList(),
     /** 6×6 snap cell (0–5). -1 = auto / unset. */
     val gridCol: Int = -1,
     val gridRow: Int = -1,
     val gridColSpan: Int = 1,
     val gridRowSpan: Int = 1,
     val collapsed: Boolean = false,
+    /** Storyboard: which separate 3×3 board this panel lives on. 0 = first page. */
+    val gridPage: Int = 0,
 ) : Block
 
 @Serializable

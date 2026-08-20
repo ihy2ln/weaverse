@@ -82,6 +82,7 @@ import com.ihy2ln.weaverse.feature.roleplay.characters.CharactersScreen
 import com.ihy2ln.weaverse.feature.roleplay.chat.RoleplayChatChrome
 import com.ihy2ln.weaverse.feature.roleplay.chat.RoleplayChatDetailScreen
 import com.ihy2ln.weaverse.feature.roleplay.chat.RoleplayChatsScreen
+import com.ihy2ln.weaverse.feature.roleplay.chat.RoleplayModePickerScreen
 import com.ihy2ln.weaverse.feature.roleplay.chat.roleplayModeSubtitle
 import com.ihy2ln.weaverse.feature.roleplay.lorebook.LorebookScreen
 import com.ihy2ln.weaverse.feature.roleplay.personas.PersonaDetailScreen
@@ -109,6 +110,7 @@ fun AppShell(
     var workspaceFocus by rememberSaveable { mutableStateOf(WorkspaceFocus.Story.name) }
     var chromeTool by rememberSaveable { mutableStateOf<String?>(null) }
     var selectedRpChatId by rememberSaveable { mutableStateOf<String?>(null) }
+    var selectedRpMode by rememberSaveable { mutableStateOf<String?>(null) }
     var selectedCodexEntryId by rememberSaveable { mutableStateOf<String?>(null) }
     var selectedCharacterId by rememberSaveable { mutableStateOf<String?>(null) }
     var selectedPersonaId by rememberSaveable { mutableStateOf<String?>(null) }
@@ -280,6 +282,7 @@ fun AppShell(
                     chromeTool = null
                     selectedRpChatId = null
                     rpChrome = null
+                    selectedRpMode = null
                     if (next != AppMode.Notes.name) {
                         workspaceFocus = WorkspaceFocus.Story.name
                     }
@@ -326,6 +329,7 @@ fun AppShell(
                             SearchResultType.RoleplayChat -> {
                                 mode = AppMode.Roleplay.name
                                 selectedRpChatId = result.id
+                                selectedRpMode = null
                                 rpDest = RoleplayDestination.Chats.name
                             }
                             SearchResultType.Snippet -> mode = AppMode.Novel.name
@@ -363,7 +367,10 @@ fun AppShell(
             if (inRpChat && !rpModeBarCollapsed) {
                 RoleplayDisplayModeBar(
                     displayMode = rpChrome!!.displayMode,
-                    onSelect = rpChrome!!.onDisplayMode,
+                    onSelect = { next ->
+                        rpChrome!!.onDisplayMode(next)
+                        selectedRpMode = next
+                    },
                     onCollapse = { rpModeBarCollapsed = true },
                     modifier = Modifier.fillMaxWidth(),
                 )
@@ -496,8 +503,9 @@ fun AppShell(
                             AppMode.Notes.name -> NotesScreen(viewModel = notesViewModel)
                             else -> when (RoleplayDestination.valueOf(rd)) {
                                 RoleplayDestination.Chats -> {
-                                    if (chatId != null) {
-                                        RoleplayChatDetailScreen(
+                                    val rpMode = selectedRpMode
+                                    when {
+                                        chatId != null -> RoleplayChatDetailScreen(
                                             chatId = chatId,
                                             onBack = {
                                                 selectedRpChatId = null
@@ -508,8 +516,14 @@ fun AppShell(
                                             onOpenManualPrompt = { shellViewModel.openPrompt(PromptEntryKind.Manual) },
                                             promptOverlayOpen = promptOverlayOpen,
                                         )
-                                    } else {
-                                        RoleplayChatsScreen(onChatClick = { selectedRpChatId = it })
+                                        rpMode != null -> RoleplayChatsScreen(
+                                            displayMode = rpMode,
+                                            onChatClick = { selectedRpChatId = it },
+                                            onBack = { selectedRpMode = null },
+                                        )
+                                        else -> RoleplayModePickerScreen(
+                                            onModeSelected = { selectedRpMode = it },
+                                        )
                                     }
                                 }
                                 RoleplayDestination.Characters -> CharactersScreen(
@@ -572,7 +586,7 @@ private fun RoleplayDisplayModeBar(
             options = listOf(
                 SegmentedOption("messenger", "Messenger"),
                 SegmentedOption("dungeonMaster", "DM"),
-                SegmentedOption("roleplay", "Roleplay"),
+                SegmentedOption("roleplay", "Storyboard"),
             ),
             selectedId = displayMode,
             onSelect = onSelect,

@@ -8,6 +8,10 @@ what is actually implemented in this codebase, not an aspirational spec.
 For the wiki-formatted equivalent (same content, split across pages), see
 the [repo Wiki](https://github.com/ihy2ln/weaverse/wiki).
 
+For a feature-level deep dive (rather than this document's module/schema
+level), see `docs/features/`, and `docs/CHECKPOINTS.md` for stable points
+in the branch history worth knowing about before a large change.
+
 ## What the app is
 
 Weaverse is an offline-first novel-writing app (Novelcrafter-style: Plan /

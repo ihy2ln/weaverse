@@ -33,6 +33,29 @@ class RoleplayPromptBuilderTest {
     }
 
     @Test
+    fun systemBlocks_dungeonMaster_addsStopAndWaitInstruction() {
+        val blocks = RoleplayPromptBuilder.systemBlocks(
+            character = null,
+            outputWords = 400,
+            displayMode = "dungeonMaster",
+        )
+        val joined = blocks.joinToString("\n")
+        assertTrue(joined.contains("Dungeon Master"))
+        assertTrue(joined.contains("wait for the player"))
+    }
+
+    @Test
+    fun systemBlocks_roleplay_addsPanelBeatInstruction() {
+        val blocks = RoleplayPromptBuilder.systemBlocks(
+            character = null,
+            outputWords = 400,
+            displayMode = "roleplay",
+        )
+        val joined = blocks.joinToString("\n")
+        assertTrue(joined.contains("panel"))
+    }
+
+    @Test
     fun characterBlock_keepsCustomProse() {
         val character = RpCharacterEntity(
             id = "char-2",

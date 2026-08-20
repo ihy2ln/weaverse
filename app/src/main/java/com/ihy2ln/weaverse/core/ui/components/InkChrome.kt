@@ -232,6 +232,7 @@ fun InkModeCapsule(
     modifier: Modifier = Modifier,
     selected: Boolean = false,
     enabled: Boolean = true,
+    compact: Boolean = false,
 ) {
     val tokens = inkTokens()
     val shape = RoundedCornerShape(999.dp)
@@ -246,9 +247,12 @@ fun InkModeCapsule(
                 shape,
             )
             .clickable(enabled = enabled, onClick = onClick)
-            .padding(horizontal = InkSpacing.lg, vertical = InkSpacing.sm),
+            .padding(
+                horizontal = if (compact) InkSpacing.sm else InkSpacing.lg,
+                vertical = if (compact) InkSpacing.xxs else InkSpacing.sm,
+            ),
         color = if (enabled) tokens.primaryText else tokens.secondaryText,
-        fontSize = 14.sp,
+        fontSize = if (compact) 12.sp else 14.sp,
         fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
         maxLines = 1,
         overflow = TextOverflow.Ellipsis,

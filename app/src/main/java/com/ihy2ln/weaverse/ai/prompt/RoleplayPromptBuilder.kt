@@ -9,10 +9,23 @@ object RoleplayPromptBuilder {
         character: RpCharacterEntity?,
         persona: RpPersonaEntity? = null,
         outputWords: Int,
+        displayMode: String = "messenger",
     ): List<String> = buildList {
         addAll(DefaultAiGuides.systemBlocks(com.ihy2ln.weaverse.feature.shell.AppMode.Roleplay, outputWords))
         character?.let { add(characterBlock(it)) }
         persona?.takeIf { it.name.isNotBlank() || it.description.isNotBlank() }?.let { add(personaBlock(it)) }
+        displayModeBlock(displayMode)?.let { add(it) }
+    }
+
+    private fun displayModeBlock(displayMode: String): String? = when (displayMode) {
+        "dungeonMaster" -> "You are the Dungeon Master narrating a choose-your-own-adventure " +
+            "scene. Write a short burst of narration (2-4 sentences) that sets or advances the " +
+            "scene, then stop and wait for the player's response — never answer for the player " +
+            "and never skip ahead multiple beats at once."
+        "roleplay" -> "This is a manga/comic-style scene told in short panel beats. Keep each " +
+            "reply tight and visual — a sentence or two of action or dialogue per beat, the way " +
+            "a comic panel's caption or speech bubble would read, not prose paragraphs."
+        else -> null
     }
 
     fun characterBlock(character: RpCharacterEntity): String {

@@ -126,6 +126,20 @@ class GlobalPromptViewModel @Inject constructor(
         _uiState.update { it.copy(kind = null, isStreaming = false) }
     }
 
+    /**
+     * Selects Manual/Generative mode. Opens the prompt window fresh if it wasn't
+     * already expanded; otherwise switches mode in place, keeping the typed text.
+     */
+    fun setKind(kind: PromptEntryKind) {
+        val current = _uiState.value.kind
+        if (current == kind) return
+        if (current == null) {
+            open(kind)
+        } else {
+            _uiState.update { it.copy(kind = kind) }
+        }
+    }
+
     fun onTextChange(value: String) {
         _uiState.update { it.copy(text = value, errorMessage = "", statusMessage = "") }
     }
@@ -319,7 +333,12 @@ class GlobalPromptViewModel @Inject constructor(
         val chat = db.roleplayDao().getChat(chatId)
         val character = chat?.characterId?.let { db.roleplayDao().getCharacter(it) }
         val persona = chat?.personaId?.let { db.roleplayDao().getPersona(it) }
-        return RoleplayPromptBuilder.systemBlocks(character, persona, outputWords)
+        return RoleplayPromptBuilder.systemBlocks(
+            character,
+            persona,
+            outputWords,
+            displayMode = chat?.displayMode.orEmpty().ifBlank { "messenger" },
+        )
     }
 
     private suspend fun activeRpDisplayMode(chatId: String): String =
